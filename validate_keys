@@ -23,21 +23,29 @@ function log {
 }
 log "User attempting to login in with key:${fingerprint}"; 
 
-if grep -q ${key_to_test} ${key_file} ; then
+if grep -q "${key_type} ${key_to_test}" ${key_file} ; then
 	log "Key ${fingerprint} found in ${key_file}" 
-	#Keys are not valid after a year
-	now=$(date "+%s")
-	cutoff=$(./mysql_connect "SELECT unix_timestamp(cutoff_date) FROM public_keys WHERE fingerprint = '${fingerprint}'")
-	log "cutoff_date is ${cutoff}"
-	if [[ "${now}" -gt "${cutoff}" ]] ; then
-		log "Cutoff date has passed for key: ${fingerprint}"
-		exit 1
-	else
-		log "User ${username} can connect with: ${fingerprint}"
+	cutoff=$(./mysql-connect "SELECT unix_timestamp(cutoff_date) FROM public_keys WHERE fingerprint = '${fingerprint}'")
+	if [ -z ${cutoff} ] ; then
+		log "key not in db yet. Adding it with todays date."
+		#Keys are not valid after a year
+		sql="INSERT INTO public_keys (username, fingerprint, cutoff_date) VALUES ('${username}', '${fingerprint}', date_add(now(),interval 365 day))"
+		./mysql-connect "${sql}"
 		echo "${key_type} ${key_to_test}"
-		exit 0
+		exit 
+	else
+		log "cutoff_date is ${cutoff}"
+		now=$(date "+%s")
+		if [[ "${now}" -gt "${cutoff}" ]] ; then
+			log "Cutoff date has passed for key: ${fingerprint}"
+			exit 
+		else
+			log "User ${username} can connect with: ${fingerprint}"
+			echo "${key_type} ${key_to_test}"
+			exit 
+		fi
 	fi
 else
 	log "Key ${fingerprint} NOT in ${key_file}"
-	exit 1
+	exit 
 fi
