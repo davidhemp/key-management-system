@@ -1,0 +1,43 @@
+#!/bin/bash
+# Takes the inputs from the AuthorizedKeysCommand command and returns the public key if it is allowed and 1 if it is not. 
+# This runs as the user to ensure access to home directory for root squashed filesystems.
+# In sshd_config add the following without the comments:
+# PubkeyAuthentication yes
+# AuthorizedKeysFile /dev/null
+# AuthorizedKeysCommand /usr/bin/validate_keys %u %h %k %f %t
+# AuthorizedKeysCommandUser %u
+
+username=$1
+user_home_dir=$2
+key_to_test=$3
+fingerprint=$4
+key_type=$5
+
+key_file=${user_home_dir}/.ssh/authorized_keys
+
+logging=1
+function log {
+	if [[ ${logging} -eq 1 ]]; then
+		logger -p authpriv.debug ${1}
+	fi
+}
+log "User attempting to login in with key:${fingerprint}"; 
+
+if grep -q ${key_to_test} ${key_file} ; then
+	log "Key ${fingerprint} found in ${key_file}" 
+	#Keys are not valid after a year
+	now=$(date "+%s")
+	cutoff=$(./mysql_connect "SELECT unix_timestamp(cutoff_date) FROM public_keys WHERE fingerprint = '${fingerprint}'")
+	log "cutoff_date is ${cutoff}"
+	if [[ "${now}" -gt "${cutoff}" ]] ; then
+		log "Cutoff date has passed for key: ${fingerprint}"
+		exit 1
+	else
+		log "User ${username} can connect with: ${fingerprint}"
+		echo "${key_type} ${key_to_test}"
+		exit 0
+	fi
+else
+	log "Key ${fingerprint} NOT in ${key_file}"
+	exit 1
+fi
