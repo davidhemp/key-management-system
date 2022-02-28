@@ -1,0 +1,1 @@
+mysql -u kms -pkms_password -D kms -ss -e
