@@ -88,11 +88,8 @@ for column in $(${SQL_CONNECT} "${sql}"); do
 done
 assert_str "Table has expected columns" " username fingerprint cutoff_date" "${test_str}"
 
-## Can add/remove keys
-printf "Attempting to cleaning up any old test_user keys... "
-sql="DELETE FROM public_keys WHERE username='test_user'"
-${SQL_CONNECT} "${sql}"
-printf "Done\n"
+## add/remove keys tests
+./cleanup_test_data
 
 sql="INSERT INTO public_keys (username, fingerprint, cutoff_date) VALUES ('test_user', '123456789', date_add(now(),interval 365 day))"
 ${SQL_CONNECT} "${sql}"
@@ -104,9 +101,10 @@ sql="DELETE FROM public_keys WHERE username='test_user'"
 ${SQL_CONNECT} "${sql}"
 sql="select count(*) from public_keys where username = 'test_user' AND fingerprint = '123456789'"
 test_count=$(${SQL_CONNECT} "${sql}")
-assert_int "delete test keys" 0 ${test_count}
+assert_int "should not be able to delete test keys" 1 ${test_count}
 
 #End to end tests
+./cleanup_test_data
 ##Successful connection
 present_fingerprint=$(ssh-keygen -lf id_rsa_present.pub | awk '{ print $2 }')
 present_key=$(cat id_rsa_present.pub | awk '{ print $2 }')
@@ -124,8 +122,7 @@ test_str=$(${VALIDATE_KEYS} "test_user" $(pwd) ${missing_key} ${missing_fingerpr
 assert_str "failing to connect using missing key" "" "${test_str}"
 
 ##Key timed out
-sql="DELETE FROM public_keys WHERE username='test_user'"
-${SQL_CONNECT} "${sql}"
+./cleanup_test_data
 present_fingerprint=$(ssh-keygen -lf id_rsa_present.pub | awk '{ print $2 }')
 present_key=$(cat id_rsa_present.pub | awk '{ print $2 }')
 present_key_type=$(cat id_rsa_present.pub | awk '{ print $1 }')
@@ -134,9 +131,8 @@ ${SQL_CONNECT} "${sql}"
 test_str=$(${VALIDATE_KEYS} "test_user" $(pwd) ${present_key} ${present_fingerprint} ${present_key_type})
 assert_str "failing to connect using out of date present key" "" "${test_str}"
 
-#Cleanup
-sql="DELETE FROM public_keys WHERE username='test_user'"
-${SQL_CONNECT} "${sql}"
+#final Cleanup
+./cleanup_test_data
 
 #Summary
 echo "Tests passed: ${total_passed}/${total_tests}"

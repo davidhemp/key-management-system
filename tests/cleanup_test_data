@@ -1,0 +1,9 @@
+#!/bin/bash
+printf "Attempting to cleaning up any old test_user keys... "
+sql="DELETE FROM public_keys WHERE username='test_user'"
+mysql -u root -D kms -ss -e "${sql}"
+if [ ${?} -eq 0 ]; then
+	printf "Done\n"
+else
+	printf "Error\n"
+fi
