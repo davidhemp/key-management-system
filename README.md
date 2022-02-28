@@ -35,17 +35,18 @@ For example, the following could be used to setup a user 'kms_user'
 
 ```
 CREATE USER 'kms_user'@'localhost' IDENTIFIED BY 'userpassword';
-GRANT SELECT,INSERT kmsdb.public_keys TO 'kms_user'@'localhost';
+GRANT SELECT,INSERT ON kmsdb.public_keys TO 'kms_user'@'localhost';
+FLUSH PRIVILEGES;
 ```
 
 For the validate_keys script to work it needs to be able to connect to this database. The connect details could be added to a script called "**mysql_connect**" in the same directory as **validate_keys**. For example, the following would connect to a local mariadb database with user "**kms_user**" and password "**kms_password**". SQL commands are given to it via the command line options. 
 
 ```
 #!/bin/bash
-mysql -u kms_user -pkms_password -D kms -ss -e "${1}"
+mysql -u kms_user -pkms_password -D kmsdb -ss -e "${1}"
 ```
 
-Make use **mysql_connect** has global read and execute permissions. At this point the tests in the tests directory should run without error. 
+Make use **mysql_connect** has global read and execute permissions.  
 
 ```
 chmod +xr mysql_connect
@@ -62,3 +63,7 @@ AuthorizedKeysCommandUser %u
 ```
 
 This runs as the user to ensure access to home directory for root squashed filesystems. Alternatively it can be run as root. Check permissions needed for your system.
+
+# Tests
+
+There are a number of tests in the tests directory. These should all pass if the installtion is complete although remember that kms_user can't delete keys so these needs to be done as root or another user that has permision to do so.
