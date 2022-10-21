@@ -1,5 +1,5 @@
 #!/bin/bash
-# Takes the inputs from the AuthorizedKeysCommand command and returns the public key if it is allowed and 1 if it is not. 
+# Takes the inputs from the AuthorizedKeysCommand command and returns the public key if it is allowed and 1 if it is not.
 # This runs as the user to ensure access to home directory for root squashed filesystems.
 # In sshd_config add the following without the comments:
 # PubkeyAuthentication yes
@@ -14,49 +14,60 @@ fingerprint=$4
 key_type=$5
 
 key_file=${user_home_dir}/.ssh/authorized_keys
-sql_connect=/usr/bin/mysql_connect
+sql_connect=<Add connect method here>
+sql_type="mysql"
+
+if [[ "${sql_type}" == "mssql" ]]; then
+        sql_select="SET nocount on;SELECT dbo.unix_timestamp(cutoff_date) FROM public_keys WHERE fingerprint = '${fingerprint}';"
+        sql_insert="SET nocount on;INSERT INTO public_keys (username, fingerprint, cutoff_date) VALUES ('${username}', '${fingerprint}', dateadd(mm,3,getdate()));"
+elif [[ "${sql_type}" == "mysql" ]]; then
+        sql_select="SELECT unix_timestamp(cutoff_date) FROM public_keys WHERE fingerprint = '${fingerprint}';"
+        sql_insert="INSERT INTO public_keys (username, fingerprint, cutoff_date) VALUES ('${username}', '${fingerprint}', date_add(now(),interval 365 day));"
+fi
+
 logging=1
 function log {
-	if [[ ${logging} -eq 1 ]]; then
-		logger -p authpriv.debug ${1}
-	fi
+        if [[ ${logging} -eq 1 ]]; then
+                logger -p authpriv.debug ${1}
+        fi
 }
-log "User attempting to login in with key:${fingerprint}"; 
+
+log "User attempting to login in with key:${fingerprint}";
 
 #Grep is just an initial check that the key is valid. SSHD will do the file check.
 if grep -q "${key_type} ${key_to_test}" ${key_file} ; then
-	log "Key ${fingerprint} found in ${key_file}" 
-        cutoff=$(${sql_connect} "SELECT unix_timestamp(cutoff_date) FROM public_keys WHERE fingerprint = '${fingerprint}'")
-	rtn_code=${?} # Extra step to ensure checking correct rtn code if moved/added to
+        log "Key ${fingerprint} found in ${key_file}"
+        cutoff=$(${sql_connect} "${sql_select}")
+        rtn_code=${?} # Extra step to ensure checking correct rtn code if moved/added to
         if [ ! -z ${cutoff} ] && [ ${rtn_code} -eq 0 ]; then
-		now=$(date "+%s")
-		if [[ "${now}" -gt "${cutoff}" ]] ; then
-			log "Cutoff date has passed for key: ${fingerprint}"
-			exit 
-		else
-			log "User ${username} can connect with: ${fingerprint}"
-			#Return content of key file for sshd to check against
-			cat ${key_file}
-			exit 
-		fi
+                now=$(date "+%s")
+                if [[ "${now}" -gt "${cutoff}" ]] ; then
+                        log "Cutoff date has passed for key: ${fingerprint}"
+                        exit
+                else
+                        log "User ${username} can connect with: ${fingerprint}"
+                        #Return content of key file for sshd to check against
+                        cat ${key_file}
+                        exit
+                fi
         elif [ -z ${cutoff} ] && [ ${rtn_code} -eq 0 ]; then
-		log "Key not in db yet. Adding it with a cut off of 1 year from today."
-		#Keys are not valid after a year
-		sql="INSERT INTO public_keys (username, fingerprint, cutoff_date) VALUES ('${username}', '${fingerprint}', date_add(now(),interval 365 day))"
-		${sql_connect} "${sql}"
-		rtn_code=${?} # Extra step to ensure checking correct rtn code if moved/added to
-		if [  ${rtn_code} -ne 0 ]; then
-                	log "Failed to connect or run sql: Error code ${rtn_code}"
-			exit
-		fi
-		#Return contents of key file for sshd to check against
-		cat ${key_file}
-		exit 
+                log "Key not in db yet. Adding it with a cut off of 1 year from today."
+                #Keys are not valid after a year
+                ${sql_connect} "${sql_insert}"
+                rtn_code=${?} # Extra step to ensure checking correct rtn code if moved/added to
+                if [  ${rtn_code} -ne 0 ]; then
+                        log "Failed to connect or run sql: Error code ${rtn_code}"
+                        exit
+                fi
+                #Return contents of key file for sshd to check against
+                cat ${key_file}
+                exit
         else
                 log "Failed to connect or run sql: Error code ${rtn_code}"
-		exit
+                exit
         fi
 else
-	log "Key ${fingerprint} NOT in ${key_file}"
-	exit 
+        log "Key ${fingerprint} NOT in ${key_file}"
+        exit
 fi
+

@@ -39,18 +39,53 @@ GRANT SELECT,INSERT ON kmsdb.public_keys TO 'kms_user'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-For the validate_keys script to work it needs to be able to connect to this database. The connect details could be added to a script called "**mysql_connect**" in the same directory as **validate_keys**. For example, the following would connect to a local mariadb database with user "**kms_user**" and password "**kms_password**". SQL commands are given to it via the command line options. 
+For the validate_keys script to work it needs to be able to connect to this database. The connect details could be set to the "**sql_connect**" variable. For example, the following would connect to a local mariadb database with user "**kms_user**" and password "**kms_password**". SQL commands are given to it via the command line options. 
+
+```
+sql_connect="mysql -u kms_user -pkms_password -D kmsdb -ss -e "
+```
+
+## MS SQL
+
+The idea would be the same for Microsoft SQL Server but the commands are slightly different. To create the table use,
+
+```
+create table public_keys (username VARCHAR(10) NOT NULL, fingerprint VARCHAR(50) NOT NULL, cutoff_date DATE NOT NULL, PRIMARY KEY (fingerprint));
+```
+
+To create the user use,
+
+```
+CREATE USER kms_user WITH PASSWORD = 'userpassword';
+GRANT SELECT,INSERT ON public_keys TO kms_user;
+```
+
+The sql_connect file can use sqlcmd provided by mssql-tools on RHEL/Centos. For example,
 
 ```
 #!/bin/bash
-mysql -u kms_user -pkms_password -D kmsdb -ss -e "${1}"
+/opt/mssql-tools/bin/sqlcmd -S server_address -U 'kms_user' -P 'userpassword' -d database -Q "${1}"
 ```
 
-Make use **mysql_connect** has global read and execute permissions.  
+validate_keys expects to be able to convert the cutoff_date to a unix timestamp which isn't a builtin function in MSSQL. We get give it that function using the following,
 
 ```
-chmod +xr mysql_connect
+CREATE FUNCTION unix_timestamp (
+@ctimestamp datetime
+)
+RETURNS integer
+AS
+BEGIN
+  /* Function body */
+  declare @return integer
+   
+  SELECT @return = DATEDIFF(SECOND,{d '1970-01-01'}, @ctimestamp)
+   
+  return @return
+END
+GRANT EXECUTE ON dbo.unix_timestamp TO kms_user
 ```
+
 ## SSHD
 
 To intergrate the system into the ssh the following needs to be added to sshd_config.conf:
